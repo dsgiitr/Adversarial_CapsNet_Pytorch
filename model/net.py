@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 USE_CUDA = True if torch.cuda.is_available() else False
 
+
 class ConvLayer(nn.Module):
     def __init__(self, in_channels=1, out_channels=256, kernel_size=9):
         super(ConvLayer, self).__init__()
@@ -112,7 +113,7 @@ class Decoder(nn.Module):
 
 
 class CapsNet(nn.Module):
-    def __init__(self, config=None):
+    def __init__(self, args,config=None):
         super(CapsNet, self).__init__()
         if config:
             self.conv_layer = ConvLayer(config.cnn_in_channels, config.cnn_out_channels, config.cnn_kernel_size)
@@ -138,7 +139,7 @@ class CapsNet(nn.Module):
         return output, reconstructions, masked
 
     def loss(self, data, x, target, reconstructions):
-        return self.margin_loss(x, target) + self.reconstruction_loss(data, reconstructions)
+        return args['LAMBDA_margin']self.margin_loss(x, target) + args['LAMBDA_recon'] *self.reconstruction_loss(data, reconstructions)
 
     def margin_loss(self, x, labels, size_average=True):
         batch_size = x.size(0)
@@ -155,4 +156,4 @@ class CapsNet(nn.Module):
 
     def reconstruction_loss(self, data, reconstructions):
         loss = self.mse_loss(reconstructions.view(reconstructions.size(0), -1), data.view(reconstructions.size(0), -1))
-        return loss * 0.0005
+        return loss
