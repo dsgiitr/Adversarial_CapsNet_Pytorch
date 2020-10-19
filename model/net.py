@@ -129,7 +129,8 @@ class CapsNet(nn.Module):
             self.primary_capsules = PrimaryCaps()
             self.digit_capsules_1 = DigitCaps()
             self.decoder = Decoder()
-
+        
+        self.args = args
         self.mse_loss = nn.MSELoss()
 
     def forward(self, data):
@@ -139,7 +140,7 @@ class CapsNet(nn.Module):
         return output, reconstructions, masked
 
     def loss(self, data, x, target, reconstructions):
-        return args['LAMBDA_margin']self.margin_loss(x, target) + args['LAMBDA_recon'] *self.reconstruction_loss(data, reconstructions)
+        return self.args['LAMBDA_margin']*self.margin_loss(x, target) + self.args['LAMBDA_recon']*self.reconstruction_loss(data, reconstructions)
 
     def margin_loss(self, x, labels, size_average=True):
         batch_size = x.size(0)
