@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch.autograd import Variable
+
 USE_CUDA = True if torch.cuda.is_available() else False
 
 
@@ -83,8 +85,9 @@ class DigitCaps(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, input_width=28, input_height=28, input_channel=1):
+    def __init__(self, args, input_width=28, input_height=28, input_channel=1):
         super(Decoder, self).__init__()
+        self.args=args
         self.input_width = input_width
         self.input_height = input_height
         self.input_channel = input_channel
@@ -96,18 +99,76 @@ class Decoder(nn.Module):
             nn.Linear(1024, self.input_height * self.input_height * self.input_channel),
             nn.Sigmoid()
         )
+        self.mean = torch.tensor(0.1307)
+        self.std = torch.tensor(0.3081)
+        if(args['USE_CUDA']):
+            self.mean = self.mean.cuda()
+            self.std = self.std.cuda()
+        self.normalize = Normalize(self.mean, self.std)
 
     def forward(self, x, data):
         classes = torch.sqrt((x ** 2).sum(2))
         classes = F.softmax(classes.squeeze(), dim=1)
 
         _, max_length_indices = classes.max(dim=1)
-        masked = torch.sparse.torch.eye(10)
+        masked = Variable(torch.sparse.torch.eye(10))
         if USE_CUDA:
             masked = masked.cuda()
-        masked = masked.index_select(dim=0, index=max_length_indices.squeeze().data)
+        masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze().data))
         t = (x * masked[:, :, None, None]).view(x.size(0), -1)
         reconstructions = self.reconstraction_layers(t)
+        #Inverse Tranformations
+        reconstructions = self.normalize(reconstructions)
+        reconstructions = reconstructions.view(-1, self.input_channel, self.input_width, self.input_height)
+        return reconstructions, masked
+
+class Normalize(nn.Module):
+    def __init__(self, mean, std):
+        super(Normalize, self).__init__()
+        self.mean = mean
+        self.std = std
+
+    def forward(self, tensor):
+        output = tensor.sub(self.mean).div(self.std)
+        return output
+
+
+class leaky_Decoder(nn.Module):
+    def __init__(self, args, input_width=28, input_height=28, input_channel=1):
+        super(leaky_Decoder, self).__init__()
+        self.input_width = input_width
+        self.input_height = input_height
+        self.input_channel = input_channel
+        self.args=args
+        self.reconstraction_layers = nn.Sequential(
+            nn.Linear(16 * 10, 512),
+            nn.LeakyReLU(negative_slope=self.args['LReLU_negative_slope'], inplace=True),
+            nn.Linear(512, 1024),
+            nn.LeakyReLU(negative_slope=self.args['LReLU_negative_slope'], inplace=True),
+            nn.Linear(1024, self.input_height * self.input_height * self.input_channel),
+            nn.Sigmoid()
+        )
+        self.mean = torch.tensor(0.1307)
+        self.std = torch.tensor(0.3081)
+        if(args['USE_CUDA']):
+            self.mean = self.mean.cuda()
+            self.std = self.std.cuda()
+        self.normalize = Normalize(self.mean, self.std)
+        
+
+    def forward(self, x, data):
+        classes = torch.sqrt((x ** 2).sum(2))
+        classes = F.softmax(classes.squeeze(), dim=1)
+
+        _, max_length_indices = classes.max(dim=1)
+        masked = Variable(torch.sparse.torch.eye(10))##
+        if USE_CUDA:
+            masked = masked.cuda()
+        masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze().data))
+        t = (x * masked[:, :, None, None]).view(x.size(0), -1)
+        reconstructions = self.reconstraction_layers(t)
+        #Inverse Tranformations
+        reconstructions = self.normalize(reconstructions)
         reconstructions = reconstructions.view(-1, self.input_channel, self.input_width, self.input_height)
         return reconstructions, masked
 
@@ -115,6 +176,7 @@ class Decoder(nn.Module):
 class CapsNet(nn.Module):
     def __init__(self, args,config=None):
         super(CapsNet, self).__init__()
+        self.args = args
         if config:
             self.conv_layer = ConvLayer(config.cnn_in_channels, config.cnn_out_channels, config.cnn_kernel_size)
             self.primary_capsules = PrimaryCaps(config.pc_num_capsules, config.pc_in_channels, config.pc_out_channels,
@@ -123,14 +185,14 @@ class CapsNet(nn.Module):
                                             config.dc_out_channels)
             self.digit_capsules_2 = DigitCaps(config.dc_2_num_capsules, config.dc_2_num_routes, config.dc_2_in_channels,
                                             config.dc_2_out_channels)
-            self.decoder = Decoder(config.input_width, config.input_height, config.cnn_in_channels)
+            self.decoder = leaky_Decoder(self.args, config.input_width, config.input_height, config.cnn_in_channels)
         else:
             self.conv_layer = ConvLayer()
             self.primary_capsules = PrimaryCaps()
             self.digit_capsules_1 = DigitCaps()
-            self.decoder = Decoder()
+            self.decoder = Decoder(self.args)
         
-        self.args = args
+        
         self.mse_loss = nn.MSELoss()
 
     def forward(self, data):
