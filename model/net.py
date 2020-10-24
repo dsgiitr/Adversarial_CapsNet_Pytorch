@@ -3,11 +3,9 @@ import numpy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch.autograd import Variable
 
 USE_CUDA = True if torch.cuda.is_available() else False
-
 
 class ConvLayer(nn.Module):
     def __init__(self, in_channels=1, out_channels=256, kernel_size=9):
@@ -104,7 +102,7 @@ class Decoder(nn.Module):
         if(args['USE_CUDA']):
             self.mean = self.mean.cuda()
             self.std = self.std.cuda()
-        self.normalize = Normalize(self.mean, self.std)
+        self.unnormalize = UnNormalize(self.mean, self.std)
 
     def forward(self, x, data):
         classes = torch.sqrt((x ** 2).sum(2))
@@ -117,19 +115,17 @@ class Decoder(nn.Module):
         masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze().data))
         t = (x * masked[:, :, None, None]).view(x.size(0), -1)
         reconstructions = self.reconstraction_layers(t)
-        #Inverse Tranformations
-        reconstructions = self.normalize(reconstructions)
         reconstructions = reconstructions.view(-1, self.input_channel, self.input_width, self.input_height)
         return reconstructions, masked
 
-class Normalize(nn.Module):
+class UnNormalize(nn.Module):
     def __init__(self, mean, std):
-        super(Normalize, self).__init__()
+        super(UnNormalize, self).__init__()
         self.mean = mean
         self.std = std
 
     def forward(self, tensor):
-        output = tensor.sub(self.mean).div(self.std)
+        output = tensor.mul(self.std).add(self.mean)
         return output
 
 
@@ -153,7 +149,7 @@ class leaky_Decoder(nn.Module):
         if(args['USE_CUDA']):
             self.mean = self.mean.cuda()
             self.std = self.std.cuda()
-        self.normalize = Normalize(self.mean, self.std)
+        self.unnormalize = UnNormalize(self.mean, self.std)
         
 
     def forward(self, x, data):
@@ -167,10 +163,8 @@ class leaky_Decoder(nn.Module):
         masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze().data))
         t = (x * masked[:, :, None, None]).view(x.size(0), -1)
         reconstructions = self.reconstraction_layers(t)
-        #Inverse Tranformations
-        reconstructions = self.normalize(reconstructions)
         reconstructions = reconstructions.view(-1, self.input_channel, self.input_width, self.input_height)
-        return reconstructions, masked
+        return reconstructions, max_length_indices
 
 
 class CapsNet(nn.Module):
@@ -191,20 +185,20 @@ class CapsNet(nn.Module):
             self.primary_capsules = PrimaryCaps()
             self.digit_capsules_1 = DigitCaps()
             self.decoder = Decoder(self.args)
-        
-        
+            
         self.mse_loss = nn.MSELoss()
 
     def forward(self, data):
-        output = self.digit_capsules_1(self.primary_capsules(self.conv_layer(data))).squeeze(-1)
+        output = self.primary_capsules(self.conv_layer(data))
+        output = self.digit_capsules_1(output).squeeze(-1)
         output = self.digit_capsules_2(output)
         reconstructions, masked = self.decoder(output, data)
         return output, reconstructions, masked
 
     def loss(self, data, x, target, reconstructions):
-        return self.args['LAMBDA_margin']*self.margin_loss(x, target) + self.args['LAMBDA_recon']*self.reconstruction_loss(data, reconstructions)
+        return self.args['LAMBDA_class']*self.margin_loss(x, target) + self.args['LAMBDA_recon']*self.reconstruction_loss(data, reconstructions)
 
-    def margin_loss(self, x, labels, size_average=True):
+    def classification_loss(self, x, labels, size_average=True):
         batch_size = x.size(0)
 
         v_c = torch.sqrt((x ** 2).sum(dim=2, keepdim=True))
@@ -218,5 +212,6 @@ class CapsNet(nn.Module):
         return loss
 
     def reconstruction_loss(self, data, reconstructions):
+        data_unnormalized = self.decoder.unnormalize(data)
         loss = self.mse_loss(reconstructions.view(reconstructions.size(0), -1), data.view(reconstructions.size(0), -1))
         return loss

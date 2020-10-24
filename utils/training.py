@@ -11,7 +11,8 @@ def train_CapsNet(model, optimizer, train_loader, epoch, args):
     n_batch = len(train_loader)
     total_loss = 0
     for batch_id, (data, target) in enumerate(tqdm(train_loader)):
-        target = torch.sparse.torch.eye(10).index_select(dim=0, index=target)
+        if(args['type'] != 'plusC' and args['type'] != 'plusCR'):
+            target = torch.sparse.torch.eye(10).index_select(dim=0, index=target)
         if(args['USE_CUDA']):
             data, target = data.cuda(), target.cuda()
 
@@ -20,7 +21,7 @@ def train_CapsNet(model, optimizer, train_loader, epoch, args):
         loss = capsule_net.loss(data, output, target, reconstructions)
         loss.backward()
         optimizer.step()
-        correct = torch.sum(torch.argmax(masked, 1) == torch.argmax(target, 1))
+        correct = torch.sum(masked == target, 1)
         train_loss = loss.item()
         total_loss += train_loss
         if batch_id % 100 == 0:
@@ -39,8 +40,8 @@ def test_CapsNet(capsule_net, test_loader, epoch, args):
     test_loss = 0
     correct = 0
     for batch_id, (data, target) in enumerate(test_loader):
-
-        target = torch.sparse.torch.eye(10).index_select(dim=0, index=target)
+        if(args['type'] != 'plusC' and args['type'] != 'plusCR'):
+            target = torch.sparse.torch.eye(10).index_select(dim=0, index=target)
         if args['USE_CUDA']:
             data, target = data.cuda(), target.cuda()
 
@@ -48,7 +49,7 @@ def test_CapsNet(capsule_net, test_loader, epoch, args):
         loss = capsule_net.loss(data, output, target, reconstructions)
 
         test_loss += loss.item()
-        correct += torch.sum(torch.argmax(masked, 1) == torch.argmax(target, 1))
+        correct += torch.sum(masked == target)
 
     tqdm.write(
         "Epoch: [{}/{}], test accuracy: {:.6f}, loss: {:.6f}".format(epoch, args['N_EPOCHS'], correct / len(test_loader.dataset),

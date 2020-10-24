@@ -20,3 +20,17 @@ def dataset(args):
         testloader = torch.utils.data.DataLoader(testset, batch_size=args['BATCH_SIZE'],
                                                  shuffle=False, num_workers=2)
         return trainloader, testloader
+    if(args['DATASET_NAME']=='mnist_unnormalized'):
+        transform = transforms.Compose(
+            [transforms.ToTensor()])
+
+        trainset = torchvision.datasets.MNIST(root='./data/mnist', train=True,
+                                                download=True, transform=transform)
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=args['BATCH_SIZE'],
+                                                  shuffle=True, num_workers=2)
+
+        testset = torchvision.datasets.MNIST(root='./data/mnist', train=False,
+                                               download=True, transform=transform)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=args['BATCH_SIZE'],
+                                                 shuffle=False, num_workers=2)
+        return trainloader, testloader
