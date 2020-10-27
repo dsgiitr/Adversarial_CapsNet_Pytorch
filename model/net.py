@@ -196,11 +196,17 @@ class CapsNet(nn.Module):
         return output, reconstructions, masked
 
     def loss(self, data, x, target, reconstructions):
-        return self.args['LAMBDA_class']*self.margin_loss(x, target) + self.args['LAMBDA_recon']*self.reconstruction_loss(data, reconstructions)
+        return self.args['LAMBDA_class']*self.classification_loss(x, target) + self.args['LAMBDA_recon']*self.reconstruction_loss(data, reconstructions)
 
     def classification_loss(self, x, labels, size_average=True):
         batch_size = x.size(0)
-
+        sparse_indices = torch.sparse.torch.eye(10)
+        if(self.args['USE_CUDA']):
+            sparse_indices = sparse_indices.cuda()
+            labels = labels.cuda()
+        labels = sparse_indices.index_select(dim=0, index=labels)
+        
+        
         v_c = torch.sqrt((x ** 2).sum(dim=2, keepdim=True))
 
         left = F.relu(0.9 - v_c).view(batch_size, -1)
