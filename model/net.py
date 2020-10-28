@@ -90,11 +90,11 @@ class Decoder(nn.Module):
         self.input_height = input_height
         self.input_channel = input_channel
         self.reconstraction_layers = nn.Sequential(
-            nn.Linear(16 * 10, 512),
+            nn.Linear(args['num_features'], 512),
             nn.ReLU(inplace=True),
             nn.Linear(512, 1024),
             nn.ReLU(inplace=True),
-            nn.Linear(1024, self.input_height * self.input_height * self.input_channel),
+            nn.Linear(1024, self.args['input_channel'], self.args['input_width'], self.args['input_height']),
             nn.Sigmoid()
         )
         self.mean = torch.tensor(0.1307)
@@ -115,7 +115,7 @@ class Decoder(nn.Module):
         masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze().data))
         t = (x * masked[:, :, None, None]).view(x.size(0), -1)
         reconstructions = self.reconstraction_layers(t)
-        reconstructions = reconstructions.view(-1, self.input_channel, self.input_width, self.input_height)
+        reconstructions = reconstructions.view(-1, self.args['input_channel'], self.args['input_width'], self.args['input_height'])
         return reconstructions, masked
 
 class UnNormalize(nn.Module):
@@ -157,10 +157,10 @@ class leaky_Decoder(nn.Module):
         classes = F.softmax(classes.squeeze(), dim=1)
 
         _, max_length_indices = classes.max(dim=1)
-        masked = Variable(torch.sparse.torch.eye(10))##
+        masked = torch.sparse.torch.eye(10)
         if USE_CUDA:
             masked = masked.cuda()
-        masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze().data))
+        masked = masked.index_select(dim=0, index=max_length_indices.squeeze().data)
         t = (x * masked[:, :, None, None]).view(x.size(0), -1)
         reconstructions = self.reconstraction_layers(t)
         reconstructions = reconstructions.view(-1, self.input_channel, self.input_width, self.input_height)
