@@ -130,18 +130,15 @@ class UnNormalize(nn.Module):
 
 
 class leaky_Decoder(nn.Module):
-    def __init__(self, args, input_width=28, input_height=28, input_channel=1):
+    def __init__(self, args):
         super(leaky_Decoder, self).__init__()
-        self.input_width = input_width
-        self.input_height = input_height
-        self.input_channel = input_channel
         self.args=args
         self.reconstraction_layers = nn.Sequential(
-            nn.Linear(16 * 10, 512),
+            nn.Linear(args['num_features'], 512),
             nn.LeakyReLU(negative_slope=self.args['LReLU_negative_slope'], inplace=True),
             nn.Linear(512, 1024),
             nn.LeakyReLU(negative_slope=self.args['LReLU_negative_slope'], inplace=True),
-            nn.Linear(1024, self.input_height * self.input_height * self.input_channel),
+            nn.Linear(1024, self.args['input_channel']* self.args['input_width']* self.args['input_height']),
             nn.Sigmoid()
         )
         self.mean = torch.tensor(0.1307)
@@ -163,7 +160,7 @@ class leaky_Decoder(nn.Module):
         masked = masked.index_select(dim=0, index=max_length_indices.squeeze().data)
         t = (x * masked[:, :, None, None]).view(x.size(0), -1)
         reconstructions = self.reconstraction_layers(t)
-        reconstructions = reconstructions.view(-1, self.input_channel, self.input_width, self.input_height)
+        reconstructions = reconstructions.view(-1, self.args['input_channel'], self.args['input_width'], self.args['input_height'])
         return reconstructions, max_length_indices
 
 
@@ -179,7 +176,7 @@ class CapsNet(nn.Module):
                                             config.dc_out_channels)
             self.digit_capsules_2 = DigitCaps(config.dc_2_num_capsules, config.dc_2_num_routes, config.dc_2_in_channels,
                                             config.dc_2_out_channels)
-            self.decoder = leaky_Decoder(self.args, config.input_width, config.input_height, config.cnn_in_channels)
+            self.decoder = leaky_Decoder(self.args)
         else:
             self.conv_layer = ConvLayer()
             self.primary_capsules = PrimaryCaps()

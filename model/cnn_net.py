@@ -47,7 +47,6 @@ class cnnDecoder(nn.Module):
             masked = masked.index_select(dim=0, index=max_length_indices.squeeze().data)
             t = (x * masked[:, :, None]).view(x.size(0), -1)
             reconstructions = self.reconstraction_layers(t)
-            reconstructions = reconstructions.view(-1, self.args['input_channel'], self.args['input_width'], self.args['input_height'])
             return reconstructions, max_length_indices
         
         elif(self.args['type']=='plusR'):
