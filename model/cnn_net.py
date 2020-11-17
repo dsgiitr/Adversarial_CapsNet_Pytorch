@@ -53,6 +53,22 @@ class cnnDecoder(nn.Module):
             x = x.view(x.size(0), -1)
             reconstructions = self.reconstraction_layers(x)
             return reconstructions, max_length_indices
+        
+    def target_recon(self, x, target):
+        if(self.args['type']=='plusCR'):
+            masked = torch.sparse.torch.eye(10)
+            if USE_CUDA:
+                masked = masked.cuda()
+            masked = masked.index_select(dim=0, index=target.squeeze().data)
+            t = (x * masked[:, :, None]).view(x.size(0), -1)
+            reconstructions = self.reconstraction_layers(t)
+            return reconstructions
+        
+        elif(self.args['type']=='plusR'):
+            x = x.view(x.size(0), -1)
+            reconstructions = self.reconstraction_layers(x)
+            return reconstructions
+        
 
 class CNNnet(nn.Module):
     def __init__(self, args, config=None):

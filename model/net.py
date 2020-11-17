@@ -162,6 +162,16 @@ class leaky_Decoder(nn.Module):
         reconstructions = self.reconstraction_layers(t)
         reconstructions = reconstructions.view(-1, self.args['input_channel'], self.args['input_width'], self.args['input_height'])
         return reconstructions, max_length_indices
+    
+    def target_recon(self, x, target):
+        masked = torch.sparse.torch.eye(10)
+        if USE_CUDA:
+            masked = masked.cuda()
+        masked = masked.index_select(dim=0, index=target.squeeze().data)
+        t = (x * masked[:, :, None, None]).view(x.size(0), -1)
+        reconstructions = self.reconstraction_layers(t)
+        reconstructions = reconstructions.view(-1, self.args['input_channel'], self.args['input_width'], self.args['input_height'])
+        return reconstructions
 
 
 class CapsNet(nn.Module):
