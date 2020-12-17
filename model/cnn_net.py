@@ -91,9 +91,9 @@ class CNNnet(nn.Module):
             
     def forward(self, data):
         output = F.relu(self.conv2(F.relu(self.conv1(data))))
-        output = output.view(data.size(0), -1)
+        output = output.reshape(data.size(0), -1)
         output = self.fc2(F.relu(self.fc1(output)))
-        output = output.view(output.size(0), self.args['num_classes'], -1)
+        output = output.reshape(output.size(0), self.args['num_classes'], -1)
         reconstructions, masked = self.decoder(output, data)
         return output, reconstructions, masked
 
